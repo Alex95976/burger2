@@ -61,7 +61,6 @@ def get_symbol_rsi(symbol: str):
             raise HTTPException(status_code=404, detail="Symbol not found or not loaded yet")
         klines = kline_history[symbol]
 
-    # RSI тооцоолох цэвэрхэн функц рүү датагаа явуулж байна
     result = calculate_rsi_report(klines, symbol)
     if "error" in result:
         raise HTTPException(status_code=400, detail=result["error"])
@@ -94,6 +93,25 @@ def get_symbol_ohlc(symbol: str):
     return result
 
 @app.get("/all/{symbol}")
+def get_symbol_all_data(symbol: str):
+    symbol = symbol.upper()
+    with cache_lock:
+        if symbol not in kline_history:
+            raise HTTPException(status_code=404, detail="Symbol not found or not loaded yet")
+        klines = kline_history[symbol]
+
+    rsi_res = calculate_rsi_report(klines, symbol)
+    macd_res = calculate_macd_report(klines, symbol)
+    ohlc_res = calculate_ohlc_tracker_report(klines, symbol)
+
+    return {
+        "symbol": symbol,
+        "rsi": rsi_res if "error" not in rsi_res else None,
+        "macd": macd_res if "error" not in macd_res else None,
+        "ohlc": ohlc_res if "error" not in ohlc_res else None
+    }
+
+
 # ==================== API / DATA ====================
 def get_active_symbols():
     try:
@@ -182,7 +200,7 @@ def start_websocket(symbols):
             ws.run_forever(ping_interval=WS_PING_INTERVAL, ping_timeout=WS_PING_TIMEOUT)
         except Exception as e:
             print(f"[WS EXCEPTION] {e}")
-        print("[WS] Reconnecting in 5 seconds...")
+        print("[WS] Reconnecting in 5 seconds নমুনা...")
         time.sleep(5)
 
 # ==================== MONITOR ====================
@@ -252,7 +270,6 @@ def calculate_rsi_report(klines, symbol="UNKNOWN"):
         closes = [float(x[4]) for x in klines]
         closes_series = pd.Series(closes)
 
-        # RSI Тооцоолол
         rsi_series = RSIIndicator(close=closes_series, window=7).rsi().dropna()
         if len(rsi_series) < 4:
             return {"error": "Insufficient RSI data"}
@@ -272,7 +289,6 @@ def calculate_rsi_report(klines, symbol="UNKNOWN"):
             "rsi_70_down": [],
         }
 
-        # Last status
         last_status = "None"
         for i in range(len(rsi_series) - 1, 0, -1):
             prev_rsi, curr_rsi = rsi_series.iloc[i - 1], rsi_series.iloc[i]
@@ -289,7 +305,6 @@ def calculate_rsi_report(klines, symbol="UNKNOWN"):
                 last_status = "70D"
                 break
 
-        # Trend logic
         trend_status_history = deque(maxlen=10)
         for i in range(len(rsi_series) - 1, 0, -1):
             prev_rsi, curr_rsi = rsi_series.iloc[i - 1], rsi_series.iloc[i]
@@ -327,7 +342,6 @@ def calculate_rsi_report(klines, symbol="UNKNOWN"):
                     trend = "downtrand2"
                     break
 
-        # Historical crossover prices
         for i in range(len(rsi_series) - 2, 2, -1):
             prev_rsi, cur_rsi = rsi_series.iloc[i - 1], rsi_series.iloc[i]
             window_klines = klines[i + offset - 3 : i + offset + 1]
@@ -540,7 +554,6 @@ def calculate_ohlc_tracker_report(klines, symbol="UNKNOWN"):
         if not klines or len(klines) < 4:
             return {"error": "Not enough kline data for OHLC tracker"}
 
-        # Сүүлийн 4 лааг авах
         last_4 = klines[-4:]
         index_keys = ["-3", "-2", "-1", "0"]
         ohlc_dict = {}
@@ -573,7 +586,6 @@ def calculate_ohlc_tracker_report(klines, symbol="UNKNOWN"):
         openup = open0 > open1
         opendown = open0 < open1
 
-        # Тухайн койны state-ийг үүсгээгүй бол инициал хийх
         if symbol not in ohlc_states:
             ohlc_states[symbol] = {
                 "last_openup_limit": None,
@@ -610,30 +622,10 @@ def calculate_ohlc_tracker_report(klines, symbol="UNKNOWN"):
     except Exception as e:
         return {"error": str(e)}
 
-def get_symbol_all_data(symbol: str):
-    symbol = symbol.upper()
-    with cache_lock:
-        if symbol not in kline_history:
-            raise HTTPException(status_code=404, detail="Symbol not found or not loaded yet")
-        klines = kline_history[symbol]
-
-    rsi_res = calculate_rsi_report(klines, symbol)
-    macd_res = calculate_macd_report(klines, symbol)
-    ohlc_res = calculate_ohlc_tracker_report(klines, symbol)
-
-    return {
-        "symbol": symbol,
-        "rsi": rsi_res if "error" not in rsi_res else None,
-        "macd": macd_res if "error" not in macd_res else None,
-        "ohlc": ohlc_res if "error" not in ohlc_res else None
-    }
-    
 # ==================== ENTRY POINT ====================
 if __name__ == "__main__":
-    # 1. Background thread дээр дата татах болон websocket-ийг асаана
     daemon_thread = threading.Thread(target=start_background_daemon, daemon=True)
     daemon_thread.start()
 
-    # 2. Main thread дээр Uvicorn (FastAPI) серверийг асаана
     port = int(os.environ.get("PORT", 8000))
     uvicorn.run(app, host="0.0.0.0", port=port)
