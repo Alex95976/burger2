@@ -92,7 +92,8 @@ def get_symbol_ohlc(symbol: str):
     if "error" in result:
         raise HTTPException(status_code=400, detail=result["error"])
     return result
-    
+
+@app.get("/all/{symbol}")
 # ==================== API / DATA ====================
 def get_active_symbols():
     try:
@@ -608,7 +609,25 @@ def calculate_ohlc_tracker_report(klines, symbol="UNKNOWN"):
         }
     except Exception as e:
         return {"error": str(e)}
-        
+
+def get_symbol_all_data(symbol: str):
+    symbol = symbol.upper()
+    with cache_lock:
+        if symbol not in kline_history:
+            raise HTTPException(status_code=404, detail="Symbol not found or not loaded yet")
+        klines = kline_history[symbol]
+
+    rsi_res = calculate_rsi_report(klines, symbol)
+    macd_res = calculate_macd_report(klines, symbol)
+    ohlc_res = calculate_ohlc_tracker_report(klines, symbol)
+
+    return {
+        "symbol": symbol,
+        "rsi": rsi_res if "error" not in rsi_res else None,
+        "macd": macd_res if "error" not in macd_res else None,
+        "ohlc": ohlc_res if "error" not in ohlc_res else None
+    }
+    
 # ==================== ENTRY POINT ====================
 if __name__ == "__main__":
     # 1. Background thread дээр дата татах болон websocket-ийг асаана
