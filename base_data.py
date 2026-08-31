@@ -64,6 +64,19 @@ def get_symbol_rsi(symbol: str):
     if "error" in result:
         raise HTTPException(status_code=400, detail=result["error"])
     return result
+
+@app.get("/macd/{symbol}")
+def get_symbol_macd(symbol: str):
+    symbol = symbol.upper()
+    with cache_lock:
+        if symbol not in kline_history:
+            raise HTTPException(status_code=404, detail="Symbol not found or not loaded yet")
+        klines = kline_history[symbol]
+
+    result = calculate_macd_report(klines, symbol)
+    if "error" in result:
+        raise HTTPException(status_code=400, detail=result["error"])
+    return result
     
 # ==================== API / DATA ====================
 def get_active_symbols():
@@ -352,6 +365,144 @@ def calculate_rsi_report(klines, symbol="UNKNOWN"):
     except Exception as e:
         return {"error": str(e)}
 
+# ==================== ADVANCED MACD CALCULATION ====================
+def _build_initial_macd_state(klines, macd_line, macd_signal):
+    initial_st = {
+        "uplimit": None, "downlimit": None,
+        "uplimit_cross_line": None, "downlimit_cross_line": None,
+        "trend": "None",
+        "macd_initial_price": None
+    }
+    last_cross_up_idx = -1
+    last_cross_down_idx = -1
+
+    for i in range(len(macd_line) - 2, 2, -1):
+        if macd_line.iloc[i] > macd_signal.iloc[i] and macd_line.iloc[i-1] < macd_signal.iloc[i-1]:
+            if initial_st["uplimit"] is None:
+                last_cross_up_idx = i
+                window_klines = macd_line.iloc[i-3:i+1]
+                initial_st["uplimit"] = min(window_klines)
+                initial_st["uplimit_cross_line"] = macd_line.iloc[i]
+
+        if macd_line.iloc[i] < macd_signal.iloc[i] and macd_line.iloc[i-1] > macd_signal.iloc[i-1]:
+            if initial_st["downlimit"] is None:
+                last_cross_down_idx = i
+                window_klines = macd_line.iloc[i-3:i+1]
+                initial_st["downlimit"] = max(window_klines)
+                initial_st["downlimit_cross_line"] = macd_line.iloc[i]
+
+        if initial_st["uplimit"] is not None and initial_st["downlimit"] is not None:
+            break
+
+    if last_cross_up_idx > last_cross_down_idx:
+        initial_st["trend"] = "UP"
+    elif last_cross_down_idx > last_cross_up_idx:
+        initial_st["trend"] = "DOWN"
+
+    found_zero_cross = False
+    for i in range(len(macd_line) - 1, 0, -1):
+        curr_line = macd_line.iloc[i]
+        prev_line = macd_line.iloc[i-1]
+        if (prev_line > 0 and curr_line < 0) or (prev_line < 0 and curr_line > 0):
+            kline_idx = i + (len(klines) - len(macd_line))
+            if 0 <= kline_idx < len(klines):
+                initial_st["macd_initial_price"] = float(klines[kline_idx][1])
+                found_zero_cross = True
+                break
+
+    if not found_zero_cross and klines:
+        initial_st["macd_initial_price"] = float(klines[-1][1])
+
+    return initial_st
+
+def calculate_macd_report(klines, symbol="UNKNOWN"):
+    global macd_state
+    try:
+        if not klines or len(klines) < 50:
+            return {"error": "Not enough kline data for MACD"}
+
+        closes = [float(x[4]) for x in klines]
+        closes_series = pd.Series(closes)
+
+        ema12 = closes_series.ewm(span=12, adjust=False).mean()
+        ema26 = closes_series.ewm(span=26, adjust=False).mean()
+        macd_line = ema12 - ema26
+        macd_signal = macd_line.ewm(span=9, adjust=False).mean()
+        macd_hist = macd_line - macd_signal
+
+        if len(macd_line.dropna()) < 4:
+            return {"error": "Insufficient MACD data"}
+
+        if symbol not in macd_state:
+            macd_state[symbol] = _build_initial_macd_state(klines, macd_line, macd_signal)
+            macd_state[symbol]["line_direction"] = "None"
+            macd_state[symbol]["macd_lineup_limit"] = None
+            macd_state[symbol]["macd_linedown_limit"] = None
+
+        macd_up = macd_line.iloc[-2] > macd_signal.iloc[-2] and macd_line.iloc[-3] < macd_signal.iloc[-3]
+        macd_down = macd_line.iloc[-2] < macd_signal.iloc[-2] and macd_line.iloc[-3] > macd_signal.iloc[-3]
+
+        line_minus_1 = macd_line.iloc[-2]
+        line_minus_2 = macd_line.iloc[-3]
+
+        current_line_direction = "UP" if line_minus_1 > line_minus_2 else "DOWN"
+        previous_line_direction = macd_state[symbol].get("line_direction", "None")
+
+        if current_line_direction != previous_line_direction:
+            if current_line_direction == "DOWN":
+                macd_state[symbol]["macd_lineup_limit"] = line_minus_2
+            elif current_line_direction == "UP":
+                macd_state[symbol]["macd_linedown_limit"] = line_minus_2
+        
+        macd_state[symbol]["line_direction"] = current_line_direction
+
+        last_4_lines = [macd_line.iloc[-1], macd_line.iloc[-2], macd_line.iloc[-3], macd_line.iloc[-4]]
+        macd_min = min(last_4_lines)
+        macd_max = max(last_4_lines)
+
+        if macd_up:
+            macd_state[symbol]["trend"] = "UP"
+            macd_state[symbol]["uplimit"] = macd_min
+            macd_state[symbol]["uplimit_cross_line"] = macd_line.iloc[-2]
+        if macd_down:
+            macd_state[symbol]["trend"] = "DOWN"
+            macd_state[symbol]["downlimit"] = macd_max
+            macd_state[symbol]["downlimit_cross_line"] = macd_line.iloc[-2]
+
+        current_trend = macd_state[symbol].get("trend", "None")
+
+        try:
+            curr_line1 = macd_line.iloc[-2]
+            prev_line1 = macd_line.iloc[-3]
+            cross_zero_line_up = (prev_line1 < 0 and curr_line1 > 0)
+            cross_zero_line_down = (prev_line1 > 0 and curr_line1 < 0)
+
+            if cross_zero_line_up or cross_zero_line_down:
+                open1 = float(klines[-2][1])
+                macd_state[symbol]["macd_initial_price"] = open1
+        except IndexError:
+            pass
+
+        return {
+            "symbol": symbol,
+            "line": {"0": macd_line.iloc[-1], "-1": macd_line.iloc[-2], "-2": macd_line.iloc[-3], "-3": macd_line.iloc[-4]},
+            "signal": {"0": macd_signal.iloc[-1], "-1": macd_signal.iloc[-2], "-2": macd_signal.iloc[-3], "-3": macd_signal.iloc[-4]},
+            "hist": {"0": macd_hist.iloc[-1], "-1": macd_hist.iloc[-2], "-2": macd_hist.iloc[-3], "-3": macd_hist.iloc[-4]},
+            "macd_up": current_trend == "UP",
+            "macd_down": current_trend == "DOWN",
+            "macd_min": macd_min,
+            "macd_max": macd_max,
+            "macd_uplimit": macd_state[symbol]["uplimit"],
+            "macd_downlimit": macd_state[symbol]["downlimit"],
+            "macd_lineup_limit": macd_state[symbol].get("macd_lineup_limit"),
+            "macd_linedown_limit": macd_state[symbol].get("macd_linedown_limit"),
+            "uplimit_cross_line": macd_state[symbol]["uplimit_cross_line"],
+            "downlimit_cross_line": macd_state[symbol]["downlimit_cross_line"],
+            "macd_initial_price": macd_state[symbol].get("macd_initial_price")
+        }
+    except Exception as e:
+        return {"error": str(e)}
+        
 # ==================== ENTRY POINT ====================
 if __name__ == "__main__":
     # 1. Background thread дээр дата татах болон websocket-ийг асаана
