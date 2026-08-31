@@ -201,10 +201,10 @@ def start_background_daemon():
 
 # ==================== ENTRY POINT ====================
 if __name__ == "__main__":
-    # Background thread дээр дата татах болон websocket ажиллуулна
+    # 1. Background thread дээр дата татах болон websocket-ийг асаана
     daemon_thread = threading.Thread(target=start_background_daemon, daemon=True)
     daemon_thread.start()
 
-    # Main thread дээр FastAPI (Uvicorn) серверийг асаана (Railway-н PORT-ыг ашиглана)
+    # 2. Main thread дээр Uvicorn (FastAPI) серверийг асаана
     port = int(os.environ.get("PORT", 8000))
     uvicorn.run(app, host="0.0.0.0", port=port)
