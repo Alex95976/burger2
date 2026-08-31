@@ -3,3 +3,5 @@ binance-futures-connector
 fastapi
 uvicorn
 requests
+pandas
+ta
