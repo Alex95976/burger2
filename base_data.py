@@ -3,11 +3,14 @@ import json
 import sys
 import threading
 import time
+from collections import deque
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import websocket
 from binance.um_futures import UMFutures
 from fastapi import FastAPI, HTTPException
 import uvicorn
+import pandas as pd
+from ta.momentum import RSIIndicator
 
 # ==================== CONFIG ====================
 MAX_KLINES = 200
