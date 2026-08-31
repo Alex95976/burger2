@@ -11,6 +11,7 @@ from fastapi import FastAPI, HTTPException
 import uvicorn
 import pandas as pd
 from ta.momentum import RSIIndicator
+im
 
 # ==================== CONFIG ====================
 MAX_KLINES = 300  # MACD болон RSI-д хангалттай түүхэн дата
