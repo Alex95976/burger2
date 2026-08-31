@@ -10,7 +10,7 @@ from binance.um_futures import UMFutures
 from fastapi import FastAPI, HTTPException
 import uvicorn
 import pandas as pd
-from ta.momentum import RSIIndicato
+from ta.momentum import RSIIndicator
 import requests
 
 # ==================== CONFIG ====================
