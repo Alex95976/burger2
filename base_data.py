@@ -48,7 +48,21 @@ def get_symbol_candles(symbol: str):
             return {"symbol": symbol, "candles": kline_history[symbol]}
     raise HTTPException(status_code=404, detail="Symbol not found or not loaded yet")
 
-
+@app.get("/rsi/{symbol}")
+def get_symbol_rsi(symbol: str):
+    symbol = symbol.upper()
+    with cache_lock:
+        if symbol in kline_history:
+            candles = kline_history[symbol]
+            closes = [c[4] for c in candles] # Хаалтын үг авах
+            rsi = calculate_rsi(closes, period=7)
+            return {
+                "symbol": symbol,
+                "current_close": closes[-1] if closes else None,
+                "rsi_7": rsi
+            }
+    raise HTTPException(status_code=404, detail="Symbol not found or not loaded yet")
+    
 # ==================== API / DATA ====================
 def get_active_symbols():
     try:
@@ -198,7 +212,36 @@ def start_background_daemon():
     threading.Thread(target=status_monitor, daemon=True).start()
     start_websocket(symbols)
 
+# ==================== RSI CALCULATOR FUNCTION ====================
+def calculate_rsi(closes, period=7):
+    if len(closes) < period + 1:
+        return None
+    gains, losses = [], []
+    for i in range(1, len(closes)):
+        diff = closes[i] - closes[i-1]
+        if diff > 0:
+            gains.append(diff)
+            losses.append(0.0)
+        else:
+            gains.append(0.0)
+            losses.append(abs(diff))
 
+    avg_gain = sum(gains[:period]) / period
+    avg_loss = sum(losses[:period]) / period
+
+    if avg_loss == 0:
+        return 100.0
+
+    for i in range(period, len(gains)):
+        avg_gain = (avg_gain * (period - 1) + gains[i]) / period
+        avg_loss = (avg_loss * (period - 1) + losses[i]) / period
+
+    if avg_loss == 0:
+        return 100.0
+
+    rs = avg_gain / avg_loss
+    return round(100 - (100 / (1 + rs)), 2)
+    
 # ==================== ENTRY POINT ====================
 if __name__ == "__main__":
     # 1. Background thread дээр дата татах болон websocket-ийг асаана
