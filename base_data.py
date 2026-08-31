@@ -10,8 +10,8 @@ from binance.um_futures import UMFutures
 from fastapi import FastAPI, HTTPException
 import uvicorn
 import pandas as pd
-from ta.momentum import RSIIndicator
-im
+from ta.momentum import RSIIndicato
+import requests
 
 # ==================== CONFIG ====================
 MAX_KLINES = 300  # MACD болон RSI-д хангалттай түүхэн дата
