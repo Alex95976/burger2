@@ -52,16 +52,15 @@ def get_symbol_candles(symbol: str):
 def get_symbol_rsi(symbol: str):
     symbol = symbol.upper()
     with cache_lock:
-        if symbol in kline_history:
-            candles = kline_history[symbol]
-            closes = [c[4] for c in candles] # Хаалтын үг авах
-            rsi = calculate_rsi(closes, period=7)
-            return {
-                "symbol": symbol,
-                "current_close": closes[-1] if closes else None,
-                "rsi_7": rsi
-            }
-    raise HTTPException(status_code=404, detail="Symbol not found or not loaded yet")
+        if symbol not in kline_history:
+            raise HTTPException(status_code=404, detail="Symbol not found or not loaded yet")
+        klines = kline_history[symbol]
+
+    # RSI тооцоолох цэвэрхэн функц рүү датагаа явуулж байна
+    result = calculate_rsi_report(klines, symbol)
+    if "error" in result:
+        raise HTTPException(status_code=400, detail=result["error"])
+    return result
     
 # ==================== API / DATA ====================
 def get_active_symbols():
@@ -213,35 +212,143 @@ def start_background_daemon():
     start_websocket(symbols)
 
 # ==================== RSI CALCULATOR FUNCTION ====================
-def calculate_rsi(closes, period=7):
-    if len(closes) < period + 1:
-        return None
-    gains, losses = [], []
-    for i in range(1, len(closes)):
-        diff = closes[i] - closes[i-1]
-        if diff > 0:
-            gains.append(diff)
-            losses.append(0.0)
-        else:
-            gains.append(0.0)
-            losses.append(abs(diff))
+# ==================== ADVANCED RSI CALCULATION FUNCTION ====================
+def calculate_rsi_report(klines, symbol="UNKNOWN"):
+    try:
+        if not klines or len(klines) < 50:
+            return {"error": "Not enough kline data for RSI"}
 
-    avg_gain = sum(gains[:period]) / period
-    avg_loss = sum(losses[:period]) / period
+        closes = [float(x[4]) for x in klines]
+        closes_series = pd.Series(closes)
 
-    if avg_loss == 0:
-        return 100.0
+        # RSI Тооцоолол
+        rsi_series = RSIIndicator(close=closes_series, window=7).rsi().dropna()
+        if len(rsi_series) < 4:
+            return {"error": "Insufficient RSI data"}
 
-    for i in range(period, len(gains)):
-        avg_gain = (avg_gain * (period - 1) + gains[i]) / period
-        avg_loss = (avg_loss * (period - 1) + losses[i]) / period
+        rsi0, rsi1, rsi2, rsi3 = (
+            rsi_series.iloc[-1],
+            rsi_series.iloc[-2],
+            rsi_series.iloc[-3],
+            rsi_series.iloc[-4],
+        )
 
-    if avg_loss == 0:
-        return 100.0
+        offset = len(klines) - len(rsi_series)
+        price_history = {
+            "rsi_30_up": [],
+            "rsi_30_down": [],
+            "rsi_70_up": [],
+            "rsi_70_down": [],
+        }
 
-    rs = avg_gain / avg_loss
-    return round(100 - (100 / (1 + rs)), 2)
-    
+        # Last status
+        last_status = "None"
+        for i in range(len(rsi_series) - 1, 0, -1):
+            prev_rsi, curr_rsi = rsi_series.iloc[i - 1], rsi_series.iloc[i]
+            if prev_rsi <= 30 and curr_rsi > 30:
+                last_status = "30U"
+                break
+            if prev_rsi >= 30 and curr_rsi < 30:
+                last_status = "30D"
+                break
+            if prev_rsi <= 70 and curr_rsi > 70:
+                last_status = "70U"
+                break
+            if prev_rsi >= 70 and curr_rsi < 70:
+                last_status = "70D"
+                break
+
+        # Trend logic
+        trend_status_history = deque(maxlen=10)
+        for i in range(len(rsi_series) - 1, 0, -1):
+            prev_rsi, curr_rsi = rsi_series.iloc[i - 1], rsi_series.iloc[i]
+            new_status = None
+            if prev_rsi <= 30 and curr_rsi > 30:
+                new_status = "30U"
+            elif prev_rsi >= 30 and curr_rsi < 30:
+                new_status = "30D"
+            elif prev_rsi <= 50 and curr_rsi > 50:
+                new_status = "50U"
+            elif prev_rsi >= 50 and curr_rsi < 50:
+                new_status = "50D"
+            elif prev_rsi <= 70 and curr_rsi > 70:
+                new_status = "70U"
+            elif prev_rsi >= 70 and curr_rsi < 70:
+                new_status = "70D"
+            if new_status:
+                if not trend_status_history or trend_status_history[0] != new_status:
+                    trend_status_history.appendleft(new_status)
+
+        trend = "None"
+        if len(trend_status_history) >= 2:
+            for i in range(len(trend_status_history) - 1, 0, -1):
+                curr, prev = trend_status_history[i], trend_status_history[i - 1]
+                if prev == "30U" and curr == "50U":
+                    trend = "uptrand1"
+                    break
+                elif prev == "50U" and curr == "70U":
+                    trend = "uptrand2"
+                    break
+                elif prev == "70D" and curr == "50D":
+                    trend = "downtrand1"
+                    break
+                elif prev == "50D" and curr == "30D":
+                    trend = "downtrand2"
+                    break
+
+        # Historical crossover prices
+        for i in range(len(rsi_series) - 2, 2, -1):
+            prev_rsi, cur_rsi = rsi_series.iloc[i - 1], rsi_series.iloc[i]
+            window_klines = klines[i + offset - 3 : i + offset + 1]
+            w_opens = [float(k[1]) for k in window_klines]
+            if prev_rsi <= 30 and cur_rsi > 30:
+                price_history["rsi_30_up"].append(min(w_opens))
+            if prev_rsi >= 30 and cur_rsi < 30:
+                price_history["rsi_30_down"].append(max(w_opens))
+            if prev_rsi <= 70 and cur_rsi > 70:
+                price_history["rsi_70_up"].append(min(w_opens))
+            if prev_rsi >= 70 and cur_rsi < 70:
+                price_history["rsi_70_down"].append(max(w_opens))
+
+        s30u_val = price_history["rsi_30_up"][0] if price_history["rsi_30_up"] else None
+        s70d_val = price_history["rsi_70_down"][0] if price_history["rsi_70_down"] else None
+        s70u_val = price_history["rsi_70_up"][0] if price_history["rsi_70_up"] else None
+        s30d_val = price_history["rsi_30_down"][0] if price_history["rsi_30_down"] else None
+
+        average_status = (s30u_val + s70d_val) / 2.0 if s30u_val and s70d_val else None
+        valid_up = [v for v in [s30u_val, s70u_val] if v is not None]
+        valid_down = [v for v in [s30d_val, s70d_val] if v is not None]
+        max_u = max(valid_up) if valid_up else None
+        min_d = min(valid_down) if valid_down else None
+
+        return {
+            "symbol": symbol,
+            "values": {"0": rsi0, "-1": rsi1, "-2": rsi2, "-3": rsi3},
+            "last_status": last_status,
+            "trend": trend,
+            "average_status": average_status,
+            "MAXU": max_u,
+            "MIND": min_d,
+            "cross_history": {
+                "s30u": s30u_val,
+                "s30u_prev": price_history["rsi_30_up"][1] if len(price_history["rsi_30_up"]) > 1 else None,
+                "s30d": s30d_val,
+                "s30d_prev": price_history["rsi_30_down"][1] if len(price_history["rsi_30_down"]) > 1 else None,
+                "s70u": s70u_val,
+                "s70u_prev": price_history["rsi_70_up"][1] if len(price_history["rsi_70_up"]) > 1 else None,
+                "s70d": s70d_val,
+                "s70d_prev": price_history["rsi_70_down"][1] if len(price_history["rsi_70_down"]) > 1 else None,
+            },
+            "cross_now": {
+                "30_up": "UP" if (rsi2 <= 30 and rsi1 > 30) else "--",
+                "70_up": "UP" if (rsi2 <= 70 and rsi1 > 70) else "--",
+                "30_down": "DOWN" if (rsi2 >= 30 and rsi1 < 30) else "--",
+                "70_down": "DOWN" if (rsi2 >= 70 and rsi1 < 70) else "--",
+            },
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
 # ==================== ENTRY POINT ====================
 if __name__ == "__main__":
     # 1. Background thread дээр дата татах болон websocket-ийг асаана
