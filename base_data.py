@@ -486,20 +486,35 @@ def calculate_macd_report(klines, symbol="UNKNOWN"):
 
         return {
             "symbol": symbol,
-            "line": {"0": macd_line.iloc[-1], "-1": macd_line.iloc[-2], "-2": macd_line.iloc[-3], "-3": macd_line.iloc[-4]},
-            "signal": {"0": macd_signal.iloc[-1], "-1": macd_signal.iloc[-2], "-2": macd_signal.iloc[-3], "-3": macd_signal.iloc[-4]},
-            "hist": {"0": macd_hist.iloc[-1], "-1": macd_hist.iloc[-2], "-2": macd_hist.iloc[-3], "-3": macd_hist.iloc[-4]},
+            "line": {
+                "0": f"{macd_line.iloc[-1]:.8f}",
+                "-1": f"{macd_line.iloc[-2]:.8f}",
+                "-2": f"{macd_line.iloc[-3]:.8f}",
+                "-3": f"{macd_line.iloc[-4]:.8f}"
+            },
+            "signal": {
+                "0": f"{macd_signal.iloc[-1]:.8f}",
+                "-1": f"{macd_signal.iloc[-2]:.8f}",
+                "-2": f"{macd_signal.iloc[-3]:.8f}",
+                "-3": f"{macd_signal.iloc[-4]:.8f}"
+            },
+            "hist": {
+                "0": f"{macd_hist.iloc[-1]:.8f}",
+                "-1": f"{macd_hist.iloc[-2]:.8f}",
+                "-2": f"{macd_hist.iloc[-3]:.8f}",
+                "-3": f"{macd_hist.iloc[-4]:.8f}"
+            },
             "macd_up": current_trend == "UP",
             "macd_down": current_trend == "DOWN",
-            "macd_min": macd_min,
-            "macd_max": macd_max,
-            "macd_uplimit": macd_state[symbol]["uplimit"],
-            "macd_downlimit": macd_state[symbol]["downlimit"],
-            "macd_lineup_limit": macd_state[symbol].get("macd_lineup_limit"),
-            "macd_linedown_limit": macd_state[symbol].get("macd_linedown_limit"),
-            "uplimit_cross_line": macd_state[symbol]["uplimit_cross_line"],
-            "downlimit_cross_line": macd_state[symbol]["downlimit_cross_line"],
-            "macd_initial_price": macd_state[symbol].get("macd_initial_price")
+            "macd_min": f"{macd_min:.8f}",
+            "macd_max": f"{macd_max:.8f}",
+            "macd_uplimit": f"{macd_state[symbol]['uplimit']:.8f}" if macd_state[symbol]['uplimit'] is not None else None,
+            "macd_downlimit": f"{macd_state[symbol]['downlimit']:.8f}" if macd_state[symbol]['downlimit'] is not None else None,
+            "macd_lineup_limit": f"{macd_state[symbol].get('macd_lineup_limit'):.8f}" if macd_state[symbol].get('macd_lineup_limit') is not None else None,
+            "macd_linedown_limit": f"{macd_state[symbol].get('macd_linedown_limit'):.8f}" if macd_state[symbol].get('macd_linedown_limit') is not None else None,
+            "uplimit_cross_line": f"{macd_state[symbol]['uplimit_cross_line']:.8f}" if macd_state[symbol]['uplimit_cross_line'] is not None else None,
+            "downlimit_cross_line": f"{macd_state[symbol]['downlimit_cross_line']:.8f}" if macd_state[symbol]['downlimit_cross_line'] is not None else None,
+            "macd_initial_price": f"{macd_state[symbol].get('macd_initial_price'):.8f}" if macd_state[symbol].get('macd_initial_price') is not None else None
         }
     except Exception as e:
         return {"error": str(e)}
