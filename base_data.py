@@ -13,7 +13,7 @@ import pandas as pd
 from ta.momentum import RSIIndicator
 
 # ==================== CONFIG ====================
-MAX_KLINES = 200
+MAX_KLINES = 300  # MACD болон RSI-д хангалттай түүхэн дата
 REST_WORKERS = 10
 WS_PING_INTERVAL = 20
 WS_PING_TIMEOUT = 10
@@ -21,12 +21,13 @@ WS_URL = "wss://fstream.binance.com/market/stream"
 
 # ==================== STATE ====================
 kline_history = {}
+macd_state = {}
 cache_lock = threading.Lock()
 closed_kline_count = 0
 last_kline_time = 0
 
 # ==================== FASTAPI APP ====================
-app = FastAPI(title="Binance Base Data Daemon")
+app = FastAPI(title="Binance Base Data Daemon with RSI & MACD Logic")
 
 @app.get("/")
 def root():
