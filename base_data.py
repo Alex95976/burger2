@@ -28,6 +28,7 @@ ohlc_states = {}
 cache_lock = threading.Lock()
 closed_kline_count = 0
 last_kline_time = 0
+last_bot_debugs = {}
 # ==================== FASTAPI APP ====================
 app = FastAPI(title="Binance Base Data Daemon with RSI & MACD Logic")
 
@@ -835,6 +836,17 @@ def trading_bot_loop():
                     is_gainer = symbol in active_gainers
                     is_loser = symbol in active_losers
 
+                    global last_bot_debugs
+                    last_bot_debugs[symbol] = {
+                        "gainer": is_gainer,
+                        "loser": is_loser,
+                        "macd_up": macd_up,
+                        "macd_down": macd_down,
+                        "open0": open0,
+                        "open1": open1,
+                        "time": time.strftime("%Y-%m-%d %H:%M:%S")
+                    }
+
                     def check_and_reset_baseline(condition_name):
                         try:
                             baselines = read_baseline_file()
@@ -890,7 +902,6 @@ def trading_bot_loop():
                 except Exception as e:
                     print(f"🔥 [SYMBOL ERROR] {symbol}: {e}")
 
-            for _ in range(5):
                 if not bot_is_running:
                     break
                 time.sleep(1)
@@ -924,3 +935,7 @@ def stop_bot():
 @app.get("/bot/status")
 def bot_status():
     return {"is_running": bot_is_running}
+
+@app.get("/bot/debug")
+def bot_debug_info():
+    return last_bot_debugs
