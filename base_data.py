@@ -831,9 +831,12 @@ def trading_bot_loop():
                     rules = client.get_symbol_rules(client_inst, symbol)
                     if not rules:
                         continue
-
+                        
                     is_gainer = symbol in active_gainers
                     is_loser = symbol in active_losers
+
+                    # == Энд нөхцөлүүдийг терминал руу хэвлээд шалгаж болно ==
+                    print(f"[DEBUG {symbol}] gainer={is_gainer}, loser={is_loser}, macd_up={macd_up}, macd_down={macd_down}, open0={open0}, open1={open1}")
 
                     def check_and_reset_baseline(condition_name):
                         try:
