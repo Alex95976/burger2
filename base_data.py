@@ -754,7 +754,7 @@ def trading_bot_loop():
         bot_is_running = False
         return
 
-    ACTIVE_TOP_N = 5
+    ACTIVE_TOP_N = 1
     LIMITS_FILE = "trade_data.json"
     BASELINE_FILE = "baseline.json"
 
