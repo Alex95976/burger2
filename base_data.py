@@ -846,26 +846,46 @@ def trading_bot_loop():
                             pass
 
                     if is_gainer:
-                        if long_opened and open0 < open1 and openup_limit and open0 < openup_limit:
+                        # HEDGE LONG хаах
+                        if long_opened and open0 < open1 and open0 < openup_limit:
                             check_and_reset_baseline("Gainer Long Close Limit")
                             pos_info = all_open_positions.get(f"{symbol}_LONG")
                             if pos_info and abs(float(pos_info.get('positionAmt', 0))) > 0:
-                                client.close_long_position(client_inst, symbol, abs(float(pos_info.get('positionAmt', 0))), info=rules)
+                                result = close_long_position(client_inst, symbol, abs(float(pos_info.get('positionAmt', 0))), info=rules)
+                                # Үр дүнг энд шалгаж болно
 
+                        # LONG нээх
                         if not long_opened and macd_up and open0 > open1:
                             check_and_reset_baseline("Gainer Long Open Limit")
-                            client.open_long_position(client_inst, symbol, info=rules)
+                            result = open_long_position(client_inst, symbol, info=rules)
 
                     elif is_loser:
-                        if short_opened and open0 > open1 and opendown_limit and open0 > opendown_limit:
+                        # HEDGE SHORT хаах
+                        if short_opened and open0 > open1 and open0 > opendown_limit:
                             check_and_reset_baseline("Loser Short Close Limit")
                             pos_info = all_open_positions.get(f"{symbol}_SHORT")
                             if pos_info and abs(float(pos_info.get('positionAmt', 0))) > 0:
-                                client.close_short_position(client_inst, symbol, abs(float(pos_info.get('positionAmt', 0))), info=rules)
+                                result = close_short_position(client_inst, symbol, abs(float(pos_info.get('positionAmt', 0))), info=rules)
 
+                        # SHORT нээх
                         if not short_opened and macd_down and open0 < open1:
                             check_and_reset_baseline("Loser Short Open Limit")
-                            client.open_short_position(client_inst, symbol, info=rules)
+                            result = open_short_position(client_inst, symbol, info=rules)
+
+                    else:
+                        # Жагсаалтаас гарсан LONG хаах
+                        if long_opened and not is_gainer and open0 < open1 and open0 < openup_limit:
+                            check_and_reset_baseline("Out-of-list Long Close Limit")
+                            pos_info = all_open_positions.get(f"{symbol}_LONG")
+                            if pos_info and abs(float(pos_info.get('positionAmt', 0))) > 0:
+                                result = close_long_position(client_inst, symbol, abs(float(pos_info.get('positionAmt', 0))), info=rules)
+
+                        # Жагсаалтаас гарсан SHORT хаах
+                        if short_opened and not is_loser and open0 > open1 and open0 > opendown_limit:
+                            check_and_reset_baseline("Out-of-list Short Close Limit")
+                            pos_info = all_open_positions.get(f"{symbol}_SHORT")
+                            if pos_info and abs(float(pos_info.get('positionAmt', 0))) > 0:
+                                result = close_short_position(client_inst, symbol, abs(float(pos_info.get('positionAmt', 0))), info=rules)
 
                 except Exception as e:
                     print(f"🔥 [SYMBOL ERROR] {symbol}: {e}")
