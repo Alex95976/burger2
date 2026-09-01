@@ -839,7 +839,9 @@ def trading_bot_loop():
 
                     global last_bot_debugs
                     last_bot_debugs.appendleft({
-                        "symbol": symbol,
+                        "active_gainers": active_gainers,
+                        "active_losers": active_losers,
+                        "checked_symbol": symbol,
                         "gainer": is_gainer,
                         "loser": is_loser,
                         "macd_up": macd_up,
