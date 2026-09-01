@@ -12,6 +12,7 @@ import uvicorn
 import pandas as pd
 from ta.momentum import RSIIndicator
 import requests
+from collections import deque
 
 # ==================== CONFIG ====================
 MAX_KLINES = 300  # MACD болон RSI-д хангалттай түүхэн дата
@@ -27,7 +28,7 @@ ohlc_states = {}
 cache_lock = threading.Lock()
 closed_kline_count = 0
 last_kline_time = 0
-last_bot_debug = {"message": "Bot has not checked anything yet"}
+last_bot_debugs = deque(maxlen=20) # Хамгийн сүүлд шалгасан 20 койныг хадгална
 
 # ==================== FASTAPI APP ====================
 app = FastAPI(title="Binance Base Data Daemon with RSI & MACD Logic")
@@ -836,8 +837,8 @@ def trading_bot_loop():
                     is_gainer = symbol in active_gainers
                     is_loser = symbol in active_losers
 
-                    global last_bot_debug
-                    last_bot_debug = {
+                    global last_bot_debugs
+                    last_bot_debugs.appendleft({
                         "symbol": symbol,
                         "gainer": is_gainer,
                         "loser": is_loser,
@@ -846,7 +847,7 @@ def trading_bot_loop():
                         "open0": open0,
                         "open1": open1,
                         "time": time.strftime("%Y-%m-%d %H:%M:%S")
-                    }
+                    })
 
                     def check_and_reset_baseline(condition_name):
                         try:
@@ -940,4 +941,4 @@ def bot_status():
 
 @app.get("/bot/debug")
 def bot_debug_info():
-    return last_bot_debug
+    return list(last_bot_debugs)
