@@ -715,6 +715,15 @@ if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8000))
     uvicorn.run(app, host="0.0.0.0", port=port)
 
+# ==================== FASTAPI STARTUP EVENT ====================
+@app.on_event("startup")
+def startup_event():
+    """FastAPI сервер асахад дата татах болон WebSocket background daemon-ийг автоматаар эхлүүлэх"""
+    daemon_thread = threading.Thread(target=start_background_daemon, daemon=True)
+    daemon_thread.start()
+    print("🚀 FastAPI startup event: Background data daemon started successfully.")
+
+
 # ==================== BOT CONTROL & INTEGRATION ====================
 bot_is_running = False
 bot_thread = None
@@ -725,7 +734,6 @@ def trading_bot_loop():
     global bot_is_running
     print("🤖 [BOT] Арилжааны бот сервер дотор эхэллээ...")
     
-    # client.py-аас функцүүдийг алдаагүй импортлох
     try:
         import client
         get_client = client.get_client
@@ -773,9 +781,6 @@ def trading_bot_loop():
     def write_baseline_file(baselines):
         write_json_file(BASELINE_FILE, baselines)
 
-    executor = ThreadPoolExecutor(max_workers=5)
-    baseline_time = time.strftime("%Y-%m-%d %H:%M:%S")
-
     while bot_is_running:
         try:
             all_open_positions = client.get_open_positions(client_inst)
@@ -783,7 +788,6 @@ def trading_bot_loop():
             if not all_open_positions:
                 write_json_file(LIMITS_FILE, {})
 
-            # Server дотроосоо шууд топ gainers/losers report-ийг дуудах
             movers = calculate_gain_lose_report()
             if "error" in movers:
                 time.sleep(3)
@@ -815,8 +819,6 @@ def trading_bot_loop():
 
                     macd_up = macd_res.get("macd_up")
                     macd_down = macd_res.get("macd_down")
-                    min_open = ohlc_res.get("min_open")
-                    max_open = ohlc_res.get("max_open")
                     candles = ohlc_res.get("candles", {})
                     open0 = float(candles.get("0", {}).get("open", 0))
                     open1 = float(candles.get("-1", {}).get("open", 0))
@@ -868,7 +870,6 @@ def trading_bot_loop():
                 except Exception as e:
                     print(f"🔥 [SYMBOL ERROR] {symbol}: {e}")
 
-            # 5 секунд хүлээх (унтраах команд ирэхэд шууд зогсохын тулд 1 секундээр салгаж унтана)
             for _ in range(5):
                 if not bot_is_running:
                     break
