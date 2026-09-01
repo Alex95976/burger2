@@ -714,3 +714,186 @@ if __name__ == "__main__":
 
     port = int(os.environ.get("PORT", 8000))
     uvicorn.run(app, host="0.0.0.0", port=port)
+
+# ==================== BOT CONTROL & INTEGRATION ====================
+bot_is_running = False
+bot_thread = None
+bot_lock = threading.Lock()
+
+def trading_bot_loop():
+    """Арилжааны ботын үндсэн цикл (Railway сервер дээр 24/7 ажиллана)"""
+    global bot_is_running
+    print("🤖 [BOT] Арилжааны бот сервер дотор эхэллээ...")
+    
+    # client.py-аас client болон функцүүдийг импортлох
+    try:
+        from client import get_client, get_open_positions, get_symbol_rules, open_long_position, open_open_short_position if hasattr(sys.modules.get('client'), 'open_short_position') else None
+        # client.py-аас бусад шаардлагатай функцүүдийг авах
+        import client
+        client_inst = client.get_client()
+        if not client_inst:
+            print("🔥 [BOT ERROR] Binance API client үүсгэхэд алдаа гарлаа (API Key шалгана уу). Бот зогслоо.")
+            bot_is_running = False
+            return
+    except Exception as e:
+        print(f"🔥 [BOT ERROR] client.py импортлоход алдаа гарлаа: {e}")
+        bot_is_running = False
+        return
+
+    ACTIVE_TOP_N = 5
+    LIMITS_FILE = "trade_data.json"
+    BASELINE_FILE = "baseline.json"
+
+    def read_json_file(filename):
+        try:
+            with open(filename, "r", encoding="utf-8") as f:
+                content = f.read().strip()
+                if not content:
+                    return {}
+                return json.loads(content)
+        except Exception:
+            return {}
+
+    def write_json_file(filename, data):
+        try:
+            with open(filename, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)
+        except Exception:
+            pass
+
+    def read_baseline_file():
+        return read_json_file(BASELINE_FILE)
+
+    def write_baseline_file(baselines):
+        write_json_file(BASELINE_FILE, baselines)
+
+    executor = ThreadPoolExecutor(max_workers=5)
+    baseline_time = time.strftime("%Y-%m-%d %H:%M:%S")
+
+    while bot_is_running:
+        try:
+            all_open_positions = client.get_open_positions(client_inst)
+
+            if not all_open_positions:
+                write_json_file(LIMITS_FILE, {})
+
+            # Server дотроосоо шууд топ gainers/losers report-ийг дуудах
+            movers = calculate_gain_lose_report()
+            if "error" in movers:
+                time.sleep(3)
+                continue
+
+            top_gainers_raw = movers.get("top_gainers", [])
+            top_losers_raw = movers.get("top_losers", [])
+
+            active_gainers = [item["symbol"] for item in top_gainers_raw[:ACTIVE_TOP_N]]
+            active_losers = [item["symbol"] for item in top_losers_raw[:ACTIVE_TOP_N]]
+
+            position_symbols = {pos["symbol"] for pos in all_open_positions.values()}
+            symbols_to_check = sorted(set(active_gainers) | set(active_losers) | position_symbols)
+
+            for symbol in symbols_to_check:
+                if not bot_is_running:
+                    break
+                try:
+                    klines = kline_history.get(symbol)
+                    if not klines or len(klines) < 50:
+                        continue
+
+                    rsi_res = calculate_rsi_report(klines, symbol)
+                    macd_res = calculate_macd_report(klines, symbol)
+                    ohlc_res = calculate_ohlc_tracker_report(klines, symbol)
+
+                    if "error" in macd_res or "error" in ohlc_res:
+                        continue
+
+                    macd_up = macd_res.get("macd_up")
+                    macd_down = macd_res.get("macd_down")
+                    min_open = ohlc_res.get("min_open")
+                    max_open = ohlc_res.get("max_open")
+                    candles = ohlc_res.get("candles", {})
+                    open0 = float(candles.get("0", {}).get("open", 0))
+                    open1 = float(candles.get("-1", {}).get("open", 0))
+                    openup_limit = ohlc_res.get("openup_limit")
+                    opendown_limit = ohlc_res.get("opendown_limit")
+
+                    long_opened = f"{symbol}_LONG" in all_open_positions
+                    short_opened = f"{symbol}_SHORT" in all_open_positions
+
+                    rules = client.get_symbol_rules(client_inst, symbol)
+                    if not rules:
+                        continue
+
+                    is_gainer = symbol in active_gainers
+                    is_loser = symbol in active_losers
+
+                    def check_and_reset_baseline(condition_name):
+                        try:
+                            baselines = read_baseline_file()
+                            new_macd_init_price = float(macd_res.get("macd_initial_price", 0))
+                            if new_macd_init_price > 0:
+                                baselines[symbol] = new_macd_init_price
+                                write_baseline_file(baselines)
+                        except Exception:
+                            pass
+
+                    if is_gainer:
+                        if long_opened and open0 < open1 and openup_limit and open0 < openup_limit:
+                            check_and_reset_baseline("Gainer Long Close Limit")
+                            pos_info = all_open_positions.get(f"{symbol}_LONG")
+                            if pos_info and abs(float(pos_info.get('positionAmt', 0))) > 0:
+                                client.close_long_position(client_inst, symbol, abs(float(pos_info.get('positionAmt', 0))), info=rules)
+
+                        if not long_opened and macd_up and open0 > open1:
+                            check_and_reset_baseline("Gainer Long Open Limit")
+                            client.open_long_position(client_inst, symbol, info=rules)
+
+                    elif is_loser:
+                        if short_opened and open0 > open1 and opendown_limit and open0 > opendown_limit:
+                            check_and_reset_baseline("Loser Short Close Limit")
+                            pos_info = all_open_positions.get(f"{symbol}_SHORT")
+                            if pos_info and abs(float(pos_info.get('positionAmt', 0))) > 0:
+                                client.close_short_position(client_inst, symbol, abs(float(pos_info.get('positionAmt', 0))), info=rules)
+
+                        if not short_opened and macd_down and open0 < open1:
+                            check_and_reset_baseline("Loser Short Open Limit")
+                            client.open_short_position(client_inst, symbol, info=rules)
+
+                except Exception as e:
+                    print(f"🔥 [SYMBOL ERROR] {symbol}: {e}")
+
+            # 5 секунд хүлээх (унтраах команд ирэхэд шууд зогсохын тулд 1 секундээр салгаж унтана)
+            for _ in range(5):
+                if not bot_is_running:
+                    break
+                time.sleep(1)
+
+        except Exception as e:
+            print(f"🔥 [BOT LOOP ERROR]: {e}")
+            time.sleep(5)
+
+    print("🛑 [BOT] Арилжааны бот амжилттай зогслоо.")
+
+@app.post("/bot/start")
+def start_bot():
+    global bot_is_running, bot_thread
+    with bot_lock:
+        if bot_is_running:
+            return {"status": "already running"}
+        bot_is_running = True
+        bot_thread = threading.Thread(target=trading_bot_loop, daemon=True)
+        bot_thread.start()
+    return {"status": "bot started successfully"}
+
+@app.post("/bot/stop")
+def stop_bot():
+    global bot_is_running
+    with bot_lock:
+        if not bot_is_running:
+            return {"status": "already stopped"}
+        bot_is_running = False
+    return {"status": "bot stop signal sent"}
+
+@app.get("/bot/status")
+def bot_status():
+    return {"is_running": bot_is_running}
