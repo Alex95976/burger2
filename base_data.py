@@ -171,16 +171,31 @@ def get_symbol_all_data(symbol: str):
     rsi_res = calculate_rsi_report(klines, symbol)
     macd_res = calculate_macd_report(klines, symbol)
     ohlc_res = calculate_ohlc_tracker_report(klines, symbol)
-    tops_res = calculate_gain_lose_report(klines, symbol)
+
+    # Тухайн койны gain/lose хувийг тооцоолох
+    tops_res = None
+    try:
+        if symbol in macd_state:
+            init_price = macd_state[symbol].get("macd_initial_price")
+            if init_price and init_price > 0:
+                close_price = float(klines[-1][4])
+                change_percent = ((close_price - init_price) / init_price) * 100
+                tops_res = {
+                    "symbol": symbol,
+                    "initial_price": round(init_price, 8),
+                    "close_price": round(close_price, 8),
+                    "change_percent": round(change_percent, 2)
+                }
+    except Exception:
+        pass
 
     return {
         "symbol": symbol,
         "rsi": rsi_res if "error" not in rsi_res else None,
         "macd": macd_res if "error" not in macd_res else None,
         "ohlc": ohlc_res if "error" not in ohlc_res else None,
-        "tops": tops_res if "error" not in tops_res else None
+        "tops": tops_res
     }
-
 
 # ==================== API / DATA ====================
 def get_active_symbols():
