@@ -171,12 +171,14 @@ def get_symbol_all_data(symbol: str):
     rsi_res = calculate_rsi_report(klines, symbol)
     macd_res = calculate_macd_report(klines, symbol)
     ohlc_res = calculate_ohlc_tracker_report(klines, symbol)
+    tops_res = calculate_gain_lose_report(klines, symbol)
 
     return {
         "symbol": symbol,
         "rsi": rsi_res if "error" not in rsi_res else None,
         "macd": macd_res if "error" not in macd_res else None,
-        "ohlc": ohlc_res if "error" not in ohlc_res else None
+        "ohlc": ohlc_res if "error" not in ohlc_res else None,
+        "tops": tops_res if "error" not in tops_res else None
     }
 
 
