@@ -97,7 +97,6 @@ def calculate_gain_lose_report():
     movers_list = []
 
     with cache_lock:
-        # Бүх койнуудын жагсаалтаар гүйх
         for symbol, klines in kline_history.items():
             if not klines or len(klines) < 50:
                 continue
@@ -108,23 +107,21 @@ def calculate_gain_lose_report():
             ema12 = closes_series.ewm(span=12, adjust=False).mean()
             ema26 = closes_series.ewm(span=26, adjust=False).mean()
             macd_line = ema12 - ema26
-            macd_signal = macd_line.ewm(span=9, adjust=False).mean()
+            signal = macd_line.ewm(span=9, adjust=False).mean()
 
-            # Хэрэв state байхгүй бол автоматаар үүсгэх
             if symbol not in macd_state:
-                macd_state[symbol] = _build_initial_macd_state(klines, macd_line, macd_signal)
+                macd_state[symbol] = _build_initial_macd_state(klines, macd_line, signal)
             
             init_price = macd_state[symbol].get("macd_initial_price")
             if not init_price or init_price <= 0:
-                # Fallback байдлаар сүүлийн лааны open эсвэл close-ийг авах
                 init_price = float(klines[-1][1])
 
             try:
+                # Энд сүүлийн лааны close ханшийг авч байна
                 close_price = float(klines[-1][4])
             except (IndexError, ValueError):
                 continue
 
-            # Хувийн өсөлт уналтыг тооцоолох
             change_percent = ((close_price - init_price) / init_price) * 100
 
             movers_list.append({
@@ -137,15 +134,11 @@ def calculate_gain_lose_report():
     if not movers_list:
         return {"error": "No valid data calculated yet"}
 
-    # Өсөлтөөр нь ихээс бага руу эрэмбэлэх
     sorted_by_gain = sorted(movers_list, key=lambda x: x["change_percent"], reverse=True)
 
-    top_10_gainers = sorted_by_gain[:10]
-    top_10_losers = sorted_by_gain[-10:][::-1]
-
     return {
-        "top_gainers": top_10_gainers,
-        "top_losers": top_10_losers
+        "top_gainers": sorted_by_gain[:10],
+        "top_losers": sorted_by_gain[-10:][::-1]
     }
 
 @app.get("/ohlc/{symbol}")
