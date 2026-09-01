@@ -89,6 +89,56 @@ def get_symbol_macd(symbol: str):
         raise HTTPException(status_code=400, detail=result["error"])
     return result
 
+@app.get("/top-movers")
+def calculate_gain_lose_report():
+    global kline_history, macd_state
+    movers_list = []
+
+    with cache_lock:
+        # Бүх койнуудын жагсаалтаар гүйх
+        for symbol, klines in kline_history.items():
+            if not klines or len(klines) < 50:
+                continue
+            
+            # MACD state болон initial price байгаа эсэхийг шалгах
+            if symbol not in macd_state:
+                continue
+            
+            init_price = macd_state[symbol].get("macd_initial_price")
+            if not init_price or init_price <= 0:
+                continue
+
+            # Сүүлийн лааны close ханш (klines[-1][4])
+            try:
+                close_price = float(klines[-1][4])
+            except (IndexError, ValueError):
+                continue
+
+            # Хувийн өсөлт уналтыг тооцоолох: ((Close - Initial) / Initial) * 100
+            change_percent = ((close_price - init_price) / init_price) * 100
+
+            movers_list.append({
+                "symbol": symbol,
+                "initial_price": round(init_price, 8),
+                "close_price": round(close_price, 8),
+                "change_percent": round(change_percent, 2)
+            })
+
+    if not movers_list:
+        return {"error": "No valid data calculated yet"}
+
+    # Өсөлтөөр нь ихээс бага руу эрэмбэлэх
+    sorted_by_gain = sorted(movers_list, key=lambda x: x["change_percent"], reverse=True)
+
+    # Top 10 Өсөлттэй (Gainers) болон Top 10 Уналттай (Losers)
+    top_10_gainers = sorted_by_gain[:10]
+    top_10_losers = sorted_by_gain[-10:][::-1]  # Хамгийн их хассан буюу доороосоо эхэлснийг буцаах
+
+    return {
+        "top_gainers": top_10_gainers,
+        "top_losers": top_10_losers
+    }
+
 @app.get("/ohlc/{symbol}")
 def get_symbol_ohlc(symbol: str):
     symbol = symbol.upper()
