@@ -508,11 +508,15 @@ def _build_initial_macd_state(klines, macd_line, macd_signal):
         initial_st["trend"] = "DOWN"
 
     found_zero_cross = False
+    # macd_line болон klines хоёрын уртын зөрүүг зөв тооцож ухарна
+    offset = len(klines) - len(macd_line)
+    
     for i in range(len(macd_line) - 1, 0, -1):
         curr_line = macd_line.iloc[i]
         prev_line = macd_line.iloc[i-1]
         if (prev_line > 0 and curr_line < 0) or (prev_line < 0 and curr_line > 0):
-            kline_idx = i + (len(klines) - len(macd_line))
+            # Offset-ийг зөв нэмж klines доторх бодит индексийг олох
+            kline_idx = i + offset
             if 0 <= kline_idx < len(klines):
                 initial_st["macd_initial_price"] = float(klines[kline_idx][1])
                 found_zero_cross = True
