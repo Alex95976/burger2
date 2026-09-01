@@ -725,12 +725,18 @@ def trading_bot_loop():
     global bot_is_running
     print("🤖 [BOT] Арилжааны бот сервер дотор эхэллээ...")
     
-    # client.py-аас client болон функцүүдийг импортлох
+    # client.py-аас функцүүдийг алдаагүй импортлох
     try:
-        from client import get_client, get_open_positions, get_symbol_rules, open_long_position, open_open_short_position if hasattr(sys.modules.get('client'), 'open_short_position') else None
-        # client.py-аас бусад шаардлагатай функцүүдийг авах
         import client
-        client_inst = client.get_client()
+        get_client = client.get_client
+        get_open_positions = client.get_open_positions
+        get_symbol_rules = client.get_symbol_rules
+        open_long_position = client.open_long_position
+        open_short_position = client.open_short_position
+        close_long_position = client.close_long_position
+        close_short_position = client.close_short_position
+        
+        client_inst = get_client()
         if not client_inst:
             print("🔥 [BOT ERROR] Binance API client үүсгэхэд алдаа гарлаа (API Key шалгана уу). Бот зогслоо.")
             bot_is_running = False
