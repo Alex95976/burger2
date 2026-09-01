@@ -89,6 +89,7 @@ def get_symbol_macd(symbol: str):
         raise HTTPException(status_code=400, detail=result["error"])
     return result
 
+# ==================== TOP GAINERS & LOSERS REPORT ====================
 @app.get("/top-movers")
 def calculate_gain_lose_report():
     global kline_history, macd_state
@@ -100,21 +101,29 @@ def calculate_gain_lose_report():
             if not klines or len(klines) < 50:
                 continue
             
-            # MACD state болон initial price байгаа эсэхийг шалгах
+            closes = [float(x[4]) for x in klines]
+            closes_series = pd.Series(closes)
+
+            ema12 = closes_series.ewm(span=12, adjust=False).mean()
+            ema26 = closes_series.ewm(span=26, adjust=False).mean()
+            macd_line = ema12 - ema26
+            macd_signal = macd_line.ewm(span=9, adjust=False).mean()
+
+            # Хэрэв state байхгүй бол автоматаар үүсгэх
             if symbol not in macd_state:
-                continue
+                macd_state[symbol] = _build_initial_macd_state(klines, macd_line, macd_signal)
             
             init_price = macd_state[symbol].get("macd_initial_price")
             if not init_price or init_price <= 0:
-                continue
+                # Fallback байдлаар сүүлийн лааны open эсвэл close-ийг авах
+                init_price = float(klines[-1][1])
 
-            # Сүүлийн лааны close ханш (klines[-1][4])
             try:
                 close_price = float(klines[-1][4])
             except (IndexError, ValueError):
                 continue
 
-            # Хувийн өсөлт уналтыг тооцоолох: ((Close - Initial) / Initial) * 100
+            # Хувийн өсөлт уналтыг тооцоолох
             change_percent = ((close_price - init_price) / init_price) * 100
 
             movers_list.append({
@@ -130,9 +139,8 @@ def calculate_gain_lose_report():
     # Өсөлтөөр нь ихээс бага руу эрэмбэлэх
     sorted_by_gain = sorted(movers_list, key=lambda x: x["change_percent"], reverse=True)
 
-    # Top 10 Өсөлттэй (Gainers) болон Top 10 Уналттай (Losers)
     top_10_gainers = sorted_by_gain[:10]
-    top_10_losers = sorted_by_gain[-10:][::-1]  # Хамгийн их хассан буюу доороосоо эхэлснийг буцаах
+    top_10_losers = sorted_by_gain[-10:][::-1]
 
     return {
         "top_gainers": top_10_gainers,
