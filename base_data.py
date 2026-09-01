@@ -881,7 +881,7 @@ def trading_bot_loop():
 
     print("🛑 [BOT] Арилжааны бот амжилттай зогслоо.")
 
-@app.post("/bot/start")
+@app.get("/bot/start")
 def start_bot():
     global bot_is_running, bot_thread
     with bot_lock:
@@ -892,7 +892,7 @@ def start_bot():
         bot_thread.start()
     return {"status": "bot started successfully"}
 
-@app.post("/bot/stop")
+@app.get("/bot/stop")
 def stop_bot():
     global bot_is_running
     with bot_lock:
