@@ -480,6 +480,8 @@ def _build_initial_macd_state(klines, macd_line, macd_signal):
         "trend": "None",
         "macd_initial_price": None
     }
+    
+    # 1. Trend болон limit-уудыг олох хэсэг (хэвээрээ)
     last_cross_up_idx = -1
     last_cross_down_idx = -1
 
@@ -506,20 +508,23 @@ def _build_initial_macd_state(klines, macd_line, macd_signal):
     elif last_cross_down_idx > last_cross_up_idx:
         initial_st["trend"] = "DOWN"
 
+    # 2. ХАМГИЙН СҮҮЛД БОЛСОН ЗӨВХӨН ТЭГ ШУГАМ ОГТЛОЛЦОЛ (Zero Cross) ОЛОХ
     found_zero_cross = False
-    # macd_line болон klines хоёрын уртын зөрүүг зөв тооцож ухарна
     offset = len(klines) - len(macd_line)
     
+    # Одоос өнгөрсөн рүү ухрахад тааралдсан ХАМГИЙН ЭХНИЙ кросс бол яг хамгийн сүүлийн кросс юм
     for i in range(len(macd_line) - 1, 0, -1):
         curr_line = macd_line.iloc[i]
         prev_line = macd_line.iloc[i-1]
+        
+        # Аль нэг чиглэл рүү тэг шугамыг гаталсан эсэх
         if (prev_line > 0 and curr_line < 0) or (prev_line < 0 and curr_line > 0):
-            # Offset-ийг зөв нэмж klines доторх бодит индексийг олох
             kline_idx = i + offset
             if 0 <= kline_idx < len(klines):
+                # Яг тухайн кросс болсон лааны OPEN ханшийг авна
                 initial_st["macd_initial_price"] = float(klines[kline_idx][1])
                 found_zero_cross = True
-                break
+                break  # Хамгийн сүүлийнхийг олмогц шууд зогсоно
 
     if not found_zero_cross and klines:
         initial_st["macd_initial_price"] = float(klines[-1][1])
@@ -581,18 +586,6 @@ def calculate_macd_report(klines, symbol="UNKNOWN"):
             macd_state[symbol]["downlimit_cross_line"] = macd_line.iloc[-2]
 
         current_trend = macd_state[symbol].get("trend", "None")
-
-        try:
-            curr_line1 = macd_line.iloc[-2]
-            prev_line1 = macd_line.iloc[-3]
-            cross_zero_line_up = (prev_line1 < 0 and curr_line1 > 0)
-            cross_zero_line_down = (prev_line1 > 0 and curr_line1 < 0)
-
-            if cross_zero_line_up or cross_zero_line_down:
-                open1 = float(klines[-2][1])
-                macd_state[symbol]["macd_initial_price"] = open1
-        except IndexError:
-            pass
 
         return {
             "symbol": symbol,
