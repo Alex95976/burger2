@@ -28,7 +28,7 @@ ohlc_states = {}
 cache_lock = threading.Lock()
 closed_kline_count = 0
 last_kline_time = 0
-last_bot_debugs = deque(maxlen=20) # Хамгийн сүүлд шалгасан 20 койныг хадгална
+last_bot_debugs = {} # Койн тус бүрээр хамгийн сүүлийн төлөвийг хадгална
 
 # ==================== FASTAPI APP ====================
 app = FastAPI(title="Binance Base Data Daemon with RSI & MACD Logic")
@@ -838,10 +838,7 @@ def trading_bot_loop():
                     is_loser = symbol in active_losers
 
                     global last_bot_debugs
-                    last_bot_debugs.appendleft({
-                        "active_gainers": active_gainers,
-                        "active_losers": active_losers,
-                        "checked_symbol": symbol,
+                    last_bot_debugs[symbol] = {
                         "gainer": is_gainer,
                         "loser": is_loser,
                         "macd_up": macd_up,
@@ -849,7 +846,7 @@ def trading_bot_loop():
                         "open0": open0,
                         "open1": open1,
                         "time": time.strftime("%Y-%m-%d %H:%M:%S")
-                    })
+                    }
 
                     def check_and_reset_baseline(condition_name):
                         try:
@@ -943,4 +940,4 @@ def bot_status():
 
 @app.get("/bot/debug")
 def bot_debug_info():
-    return list(last_bot_debugs)
+    return last_bot_debugs
