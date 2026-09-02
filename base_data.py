@@ -13,6 +13,7 @@ import pandas as pd
 from ta.momentum import RSIIndicator
 import requests
 from collections import deque
+import datetime
 
 # ==================== CONFIG ====================
 MAX_KLINES = 300  # MACD болон RSI-д хангалттай түүхэн дата
@@ -473,13 +474,17 @@ def calculate_rsi_report(klines, symbol="UNKNOWN"):
         return {"error": str(e)}
 
 # ==================== ADVANCED MACD CALCULATION ====================
+import datetime
+
 def _build_initial_macd_state(klines, macd_line, macd_signal):
     initial_st = {
         "uplimit": None, "downlimit": None,
         "uplimit_cross_line": None, "downlimit_cross_line": None,
         "trend": "None",
         "macd_initial_price": None,
-        "signal_initial_price": None  # <--- Сигнал шугамын initial price-ийг нэмэх
+        "macd_initial_time": None,      # <--- MACD цагийг хадгалах түлхүүр
+        "signal_initial_price": None,
+        "signal_initial_time": None     # <--- Signal цагийг хадгалах түлхүүр
     }
     
     # 1. Trend болон limit-уудыг олох хэсэг (хэвээрээ)
@@ -511,7 +516,7 @@ def _build_initial_macd_state(klines, macd_line, macd_signal):
 
     offset = len(klines) - len(macd_line)
 
-    # 2. MACD LINE Zero Cross (Үндсэн initial price)
+    # 2. MACD LINE Zero Cross & Timestamp
     found_zero_cross = False
     for i in range(len(macd_line) - 1, 0, -1):
         curr_line = macd_line.iloc[i]
@@ -520,13 +525,18 @@ def _build_initial_macd_state(klines, macd_line, macd_signal):
             kline_idx = i + offset
             if 0 <= kline_idx < len(klines):
                 initial_st["macd_initial_price"] = float(klines[kline_idx][1])
+                # Millisecond-ийг уншигдахуйц цаг болгон хөрвүүлэх (UTC эсвэл local)
+                ts_ms = int(klines[kline_idx][0])
+                initial_st["macd_initial_time"] = datetime.datetime.fromtimestamp(ts_ms / 1000.0, datetime.timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
                 found_zero_cross = True
                 break
 
     if not found_zero_cross and klines:
         initial_st["macd_initial_price"] = float(klines[-1][1])
+        ts_ms = int(klines[-1][0])
+        initial_st["macd_initial_time"] = datetime.datetime.fromtimestamp(ts_ms / 1000.0, datetime.timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
 
-    # 3. SIGNAL LINE (Шар зураас) Zero Cross (Хоёр дахь initial price)
+    # 3. SIGNAL LINE Zero Cross & Timestamp
     found_signal_zero_cross = False
     for i in range(len(macd_signal) - 1, 0, -1):
         curr_sig = macd_signal.iloc[i]
@@ -535,11 +545,15 @@ def _build_initial_macd_state(klines, macd_line, macd_signal):
             kline_idx = i + offset
             if 0 <= kline_idx < len(klines):
                 initial_st["signal_initial_price"] = float(klines[kline_idx][1])
+                ts_ms = int(klines[kline_idx][0])
+                initial_st["signal_initial_time"] = datetime.datetime.fromtimestamp(ts_ms / 1000.0, datetime.timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
                 found_signal_zero_cross = True
                 break
 
     if not found_signal_zero_cross and klines:
         initial_st["signal_initial_price"] = float(klines[-1][1])
+        ts_ms = int(klines[-1][0])
+        initial_st["signal_initial_time"] = datetime.datetime.fromtimestamp(ts_ms / 1000.0, datetime.timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
 
     return initial_st
 
@@ -632,7 +646,9 @@ def calculate_macd_report(klines, symbol="UNKNOWN"):
             "uplimit_cross_line": f"{macd_state[symbol]['uplimit_cross_line']:.8f}" if macd_state[symbol]['uplimit_cross_line'] is not None else None,
             "downlimit_cross_line": f"{macd_state[symbol]['downlimit_cross_line']:.8f}" if macd_state[symbol]['downlimit_cross_line'] is not None else None,
             "macd_initial_price": f"{macd_state[symbol].get('macd_initial_price'):.8f}" if macd_state[symbol].get('macd_initial_price') is not None else None,
-            "signal_initial_price": f"{macd_state[symbol].get('signal_initial_price'):.8f}" if macd_state[symbol].get('signal_initial_price') is not None else None
+            "macd_initial_time": macd_state[symbol].get('macd_initial_time'),
+            "signal_initial_price": f"{macd_state[symbol].get('signal_initial_price'):.8f}" if macd_state[symbol].get('signal_initial_price') is not None else None,
+            "signal_initial_time": macd_state[symbol].get('signal_initial_time')
         }
     except Exception as e:
         return {"error": str(e)}
