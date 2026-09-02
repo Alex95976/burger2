@@ -106,9 +106,9 @@ def calculate_gain_lose_report():
             ema12 = closes_series.ewm(span=12, adjust=False).mean()
             ema26 = closes_series.ewm(span=26, adjust=False).mean()
             macd_line = ema12 - ema26
-            signal = macd_line.ewm(span=9, adjust=False).mean()
+            macd_signal = macd_line.ewm(span=9, adjust=False).mean()
 
-            # Хуучин state байгаа эсэхээс үл хамааран хүсэлт бүрт шинэчлэн тооцоолох
+            # Хуучин state байгаа эсэхээс үл хамааран хүсэлт бүрт шинэчлэн тооцоолох (Логикийг огт эвдээгүй)
             macd_state[symbol] = _build_initial_macd_state(klines, macd_line, macd_signal)
             
             init_price = macd_state[symbol].get("macd_initial_price")
