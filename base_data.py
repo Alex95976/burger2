@@ -478,10 +478,11 @@ def _build_initial_macd_state(klines, macd_line, macd_signal):
         "uplimit": None, "downlimit": None,
         "uplimit_cross_line": None, "downlimit_cross_line": None,
         "trend": "None",
-        "macd_initial_price": None
+        "macd_initial_price": None,
+        "signal_initial_price": None  # <--- Сигнал шугамын initial price-ийг нэмэх
     }
     
-    # 1. Trend болон limit-уудыг олох хэсэг
+    # 1. Trend болон limit-уудыг олох хэсэг (хэвээрээ)
     last_cross_up_idx = -1
     last_cross_down_idx = -1
 
@@ -508,25 +509,37 @@ def _build_initial_macd_state(klines, macd_line, macd_signal):
     elif last_cross_down_idx > last_cross_up_idx:
         initial_st["trend"] = "DOWN"
 
-    # 2. ХАМГИЙН СҮҮЛД БОЛСОН ЗӨВХӨН ТЭГ ШУГАМ ОГТЛОЛЦОЛ (Zero Cross) ОЛОХ
-    found_zero_cross = False
     offset = len(klines) - len(macd_line)
-    
-    # Сүүлийн лаанаас эхлээд өнгөрсөн рүү ухрахдаа хамгийн эхэнд тааралдсан кроссыг авах
+
+    # 2. MACD LINE Zero Cross (Үндсэн initial price)
+    found_zero_cross = False
     for i in range(len(macd_line) - 1, 0, -1):
         curr_line = macd_line.iloc[i]
         prev_line = macd_line.iloc[i-1]
-        
         if (prev_line > 0 and curr_line < 0) or (prev_line < 0 and curr_line > 0):
             kline_idx = i + offset
             if 0 <= kline_idx < len(klines):
                 initial_st["macd_initial_price"] = float(klines[kline_idx][1])
                 found_zero_cross = True
-                break  # Хамгийн сүүлийн кроссыг олмогц шууд зогсоно
+                break
 
-    # Хэрэв zero cross олдохгүй бол хамгийн сүүлийн лааны open ханшийг авна
     if not found_zero_cross and klines:
         initial_st["macd_initial_price"] = float(klines[-1][1])
+
+    # 3. SIGNAL LINE (Шар зураас) Zero Cross (Хоёр дахь initial price)
+    found_signal_zero_cross = False
+    for i in range(len(macd_signal) - 1, 0, -1):
+        curr_sig = macd_signal.iloc[i]
+        prev_sig = macd_signal.iloc[i-1]
+        if (prev_sig > 0 and curr_sig < 0) or (prev_sig < 0 and curr_sig > 0):
+            kline_idx = i + offset
+            if 0 <= kline_idx < len(klines):
+                initial_st["signal_initial_price"] = float(klines[kline_idx][1])
+                found_signal_zero_cross = True
+                break
+
+    if not found_signal_zero_cross and klines:
+        initial_st["signal_initial_price"] = float(klines[-1][1])
 
     return initial_st
 
