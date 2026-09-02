@@ -482,9 +482,9 @@ def _build_initial_macd_state(klines, macd_line, macd_signal):
         "uplimit_cross_line": None, "downlimit_cross_line": None,
         "trend": "None",
         "macd_initial_price": None,
-        "macd_initial_time": None,      # <--- MACD цагийг хадгалах түлхүүр
+        "macd_initial_time": None,
         "signal_initial_price": None,
-        "signal_initial_time": None     # <--- Signal цагийг хадгалах түлхүүр
+        "signal_initial_time": None
     }
     
     # 1. Trend болон limit-уудыг олох хэсэг (хэвээрээ)
@@ -516,6 +516,9 @@ def _build_initial_macd_state(klines, macd_line, macd_signal):
 
     offset = len(klines) - len(macd_line)
 
+    # --- ЭНД МОНГОЛЫН ЦАГИЙН БҮСЭЭ ЗАРЛАХ ---
+    mongolia_tz = datetime.timezone(datetime.timedelta(hours=8))
+
     # 2. MACD LINE Zero Cross & Timestamp
     found_zero_cross = False
     for i in range(len(macd_line) - 1, 0, -1):
@@ -525,16 +528,16 @@ def _build_initial_macd_state(klines, macd_line, macd_signal):
             kline_idx = i + offset
             if 0 <= kline_idx < len(klines):
                 initial_st["macd_initial_price"] = float(klines[kline_idx][1])
-                # Millisecond-ийг уншигдахуйц цаг болгон хөрвүүлэх (UTC эсвэл local)
                 ts_ms = int(klines[kline_idx][0])
-                initial_st["macd_initial_time"] = datetime.datetime.fromtimestamp(ts_ms / 1000.0, datetime.timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
+                # Энд mongolia_tz ашиглана
+                initial_st["macd_initial_time"] = datetime.datetime.fromtimestamp(ts_ms / 1000.0, mongolia_tz).strftime('%Y-%m-%d %H:%M:%S')
                 found_zero_cross = True
                 break
 
     if not found_zero_cross and klines:
         initial_st["macd_initial_price"] = float(klines[-1][1])
         ts_ms = int(klines[-1][0])
-        initial_st["macd_initial_time"] = datetime.datetime.fromtimestamp(ts_ms / 1000.0, datetime.timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
+        initial_st["macd_initial_time"] = datetime.datetime.fromtimestamp(ts_ms / 1000.0, mongolia_tz).strftime('%Y-%m-%d %H:%M:%S')
 
     # 3. SIGNAL LINE Zero Cross & Timestamp
     found_signal_zero_cross = False
@@ -546,17 +549,17 @@ def _build_initial_macd_state(klines, macd_line, macd_signal):
             if 0 <= kline_idx < len(klines):
                 initial_st["signal_initial_price"] = float(klines[kline_idx][1])
                 ts_ms = int(klines[kline_idx][0])
-                initial_st["signal_initial_time"] = datetime.datetime.fromtimestamp(ts_ms / 1000.0, datetime.timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
+                # Энд мөн mongolia_tz ашиглана
+                initial_st["signal_initial_time"] = datetime.datetime.fromtimestamp(ts_ms / 1000.0, mongolia_tz).strftime('%Y-%m-%d %H:%M:%S')
                 found_signal_zero_cross = True
                 break
 
     if not found_signal_zero_cross and klines:
         initial_st["signal_initial_price"] = float(klines[-1][1])
         ts_ms = int(klines[-1][0])
-        initial_st["signal_initial_time"] = datetime.datetime.fromtimestamp(ts_ms / 1000.0, datetime.timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
+        initial_st["signal_initial_time"] = datetime.datetime.fromtimestamp(ts_ms / 1000.0, mongolia_tz).strftime('%Y-%m-%d %H:%M:%S')
 
     return initial_st
-
 def calculate_macd_report(klines, symbol="UNKNOWN"):
     global macd_state
     try:
