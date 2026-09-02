@@ -476,6 +476,8 @@ def calculate_rsi_report(klines, symbol="UNKNOWN"):
 # ==================== ADVANCED MACD CALCULATION ====================
 import datetime
 
+import datetime
+
 def _build_initial_macd_state(klines, macd_line, macd_signal):
     initial_st = {
         "uplimit": None, "downlimit": None,
@@ -487,7 +489,7 @@ def _build_initial_macd_state(klines, macd_line, macd_signal):
         "signal_initial_time": None
     }
     
-    # 1. Trend болон limit-уудыг олох хэсэг (хэвээрээ)
+    # 1. Trend болон limit-уудыг олох хэсэг
     last_cross_up_idx = -1
     last_cross_down_idx = -1
 
@@ -515,51 +517,38 @@ def _build_initial_macd_state(klines, macd_line, macd_signal):
         initial_st["trend"] = "DOWN"
 
     offset = len(klines) - len(macd_line)
-
-    # --- ЭНД МОНГОЛЫН ЦАГИЙН БҮСЭЭ ЗАРЛАХ ---
     mongolia_tz = datetime.timezone(datetime.timedelta(hours=8))
 
     # 2. MACD LINE Zero Cross & Timestamp
-    found_zero_cross = False
     for i in range(len(macd_line) - 1, 0, -1):
         curr_line = macd_line.iloc[i]
         prev_line = macd_line.iloc[i-1]
+        
         if (prev_line > 0 and curr_line < 0) or (prev_line < 0 and curr_line > 0):
             kline_idx = i + offset
             if 0 <= kline_idx < len(klines):
+                # Яг кросс болсон лааны OPEN үнэ [1] болон цаг [0]
                 initial_st["macd_initial_price"] = float(klines[kline_idx][1])
                 ts_ms = int(klines[kline_idx][0])
-                # Энд mongolia_tz ашиглана
                 initial_st["macd_initial_time"] = datetime.datetime.fromtimestamp(ts_ms / 1000.0, mongolia_tz).strftime('%Y-%m-%d %H:%M:%S')
-                found_zero_cross = True
                 break
 
-    if not found_zero_cross and klines:
-        initial_st["macd_initial_price"] = float(klines[-1][1])
-        ts_ms = int(klines[-1][0])
-        initial_st["macd_initial_time"] = datetime.datetime.fromtimestamp(ts_ms / 1000.0, mongolia_tz).strftime('%Y-%m-%d %H:%M:%S')
-
     # 3. SIGNAL LINE Zero Cross & Timestamp
-    found_signal_zero_cross = False
     for i in range(len(macd_signal) - 1, 0, -1):
         curr_sig = macd_signal.iloc[i]
         prev_sig = macd_signal.iloc[i-1]
+        
         if (prev_sig > 0 and curr_sig < 0) or (prev_sig < 0 and curr_sig > 0):
             kline_idx = i + offset
             if 0 <= kline_idx < len(klines):
+                # Яг кросс болсон лааны OPEN үнэ [1] болон цаг [0]
                 initial_st["signal_initial_price"] = float(klines[kline_idx][1])
                 ts_ms = int(klines[kline_idx][0])
-                # Энд мөн mongolia_tz ашиглана
                 initial_st["signal_initial_time"] = datetime.datetime.fromtimestamp(ts_ms / 1000.0, mongolia_tz).strftime('%Y-%m-%d %H:%M:%S')
-                found_signal_zero_cross = True
                 break
 
-    if not found_signal_zero_cross and klines:
-        initial_st["signal_initial_price"] = float(klines[-1][1])
-        ts_ms = int(klines[-1][0])
-        initial_st["signal_initial_time"] = datetime.datetime.fromtimestamp(ts_ms / 1000.0, mongolia_tz).strftime('%Y-%m-%d %H:%M:%S')
-
     return initial_st
+    
 def calculate_macd_report(klines, symbol="UNKNOWN"):
     global macd_state
     try:
