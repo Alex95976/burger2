@@ -108,8 +108,8 @@ def calculate_gain_lose_report():
             macd_line = ema12 - ema26
             signal = macd_line.ewm(span=9, adjust=False).mean()
 
-            if symbol not in macd_state:
-                macd_state[symbol] = _build_initial_macd_state(klines, macd_line, signal)
+            # Хуучин state байгаа эсэхээс үл хамааран хүсэлт бүрт шинэчлэн тооцоолох
+            macd_state[symbol] = _build_initial_macd_state(klines, macd_line, macd_signal)
             
             init_price = macd_state[symbol].get("macd_initial_price")
             if not init_price or init_price <= 0:
@@ -481,7 +481,7 @@ def _build_initial_macd_state(klines, macd_line, macd_signal):
         "macd_initial_price": None
     }
     
-    # 1. Trend болон limit-уудыг олох хэсэг (хэвээрээ)
+    # 1. Trend болон limit-уудыг олох хэсэг
     last_cross_up_idx = -1
     last_cross_down_idx = -1
 
@@ -512,20 +512,19 @@ def _build_initial_macd_state(klines, macd_line, macd_signal):
     found_zero_cross = False
     offset = len(klines) - len(macd_line)
     
-    # Одоос өнгөрсөн рүү ухрахад тааралдсан ХАМГИЙН ЭХНИЙ кросс бол яг хамгийн сүүлийн кросс юм
+    # Сүүлийн лаанаас эхлээд өнгөрсөн рүү ухрахдаа хамгийн эхэнд тааралдсан кроссыг авах
     for i in range(len(macd_line) - 1, 0, -1):
         curr_line = macd_line.iloc[i]
         prev_line = macd_line.iloc[i-1]
         
-        # Аль нэг чиглэл рүү тэг шугамыг гаталсан эсэх
         if (prev_line > 0 and curr_line < 0) or (prev_line < 0 and curr_line > 0):
             kline_idx = i + offset
             if 0 <= kline_idx < len(klines):
-                # Яг тухайн кросс болсон лааны OPEN ханшийг авна
                 initial_st["macd_initial_price"] = float(klines[kline_idx][1])
                 found_zero_cross = True
-                break  # Хамгийн сүүлийнхийг олмогц шууд зогсоно
+                break  # Хамгийн сүүлийн кроссыг олмогц шууд зогсоно
 
+    # Хэрэв zero cross олдохгүй бол хамгийн сүүлийн лааны open ханшийг авна
     if not found_zero_cross and klines:
         initial_st["macd_initial_price"] = float(klines[-1][1])
 
@@ -549,8 +548,10 @@ def calculate_macd_report(klines, symbol="UNKNOWN"):
         if len(macd_line.dropna()) < 4:
             return {"error": "Insufficient MACD data"}
 
+        # Хуучин state байгаа эсэхээс үл хамааран хүсэлт бүрт шинэчлэн тооцоолох
+        macd_state[symbol] = _build_initial_macd_state(klines, macd_line, macd_signal)
+
         if symbol not in macd_state:
-            macd_state[symbol] = _build_initial_macd_state(klines, macd_line, macd_signal)
             macd_state[symbol]["line_direction"] = "None"
             macd_state[symbol]["macd_lineup_limit"] = None
             macd_state[symbol]["macd_linedown_limit"] = None
