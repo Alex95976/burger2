@@ -474,19 +474,18 @@ def calculate_rsi_report(klines, symbol="UNKNOWN"):
         return {"error": str(e)}
 
 # ==================== ADVANCED MACD CALCULATION ====================
-import datetime
-
-import datetime
 
 def _build_initial_macd_state(klines, macd_line, macd_signal):
     initial_st = {
         "uplimit": None, "downlimit": None,
         "uplimit_cross_line": None, "downlimit_cross_line": None,
         "trend": "None",
-        "macd_initial_price": None,
-        "macd_initial_time": None,
-        "signal_initial_price": None,
-        "signal_initial_time": None
+        # MACD шугамын кросс тус бүрээр нь салгах
+        "macd_initial_up_price": None, "macd_initial_up_time": None,
+        "macd_initial_down_price": None, "macd_initial_down_time": None,
+        # Signal шугамын кросс тус бүрээр нь салгах
+        "signal_initial_up_price": None, "signal_initial_up_time": None,
+        "signal_initial_down_price": None, "signal_initial_down_time": None
     }
     
     # 1. Trend болон limit-уудыг олох хэсэг
@@ -519,33 +518,63 @@ def _build_initial_macd_state(klines, macd_line, macd_signal):
     offset = len(klines) - len(macd_line)
     mongolia_tz = datetime.timezone(datetime.timedelta(hours=8))
 
-    # 2. MACD LINE Zero Cross & Timestamp
+    # 2. MACD LINE Zero Crosses (UP & DOWN тус бүрээр нь хамгийн сүүлийнхийг олох)
+    found_macd_up = False
+    found_macd_down = False
+
     for i in range(len(macd_line) - 1, 0, -1):
         curr_line = macd_line.iloc[i]
         prev_line = macd_line.iloc[i-1]
         
-        if (prev_line > 0 and curr_line < 0) or (prev_line < 0 and curr_line > 0):
+        # Дээшээ огтлолцол (UP)
+        if not found_macd_up and prev_line < 0 and curr_line > 0:
             kline_idx = i + offset
             if 0 <= kline_idx < len(klines):
-                # Яг кросс болсон лааны OPEN үнэ [1] болон цаг [0]
-                initial_st["macd_initial_price"] = float(klines[kline_idx][1])
+                initial_st["macd_initial_up_price"] = float(klines[kline_idx][1])
                 ts_ms = int(klines[kline_idx][0])
-                initial_st["macd_initial_time"] = datetime.datetime.fromtimestamp(ts_ms / 1000.0, mongolia_tz).strftime('%Y-%m-%d %H:%M:%S')
-                break
+                initial_st["macd_initial_up_time"] = datetime.datetime.fromtimestamp(ts_ms / 1000.0, mongolia_tz).strftime('%Y-%m-%d %H:%M:%S')
+                found_macd_up = True
 
-    # 3. SIGNAL LINE Zero Cross & Timestamp
+        # Доошоо огтлолцол (DOWN)
+        if not found_macd_down and prev_line > 0 and curr_line < 0:
+            kline_idx = i + offset
+            if 0 <= kline_idx < len(klines):
+                initial_st["macd_initial_down_price"] = float(klines[kline_idx][1])
+                ts_ms = int(klines[kline_idx][0])
+                initial_st["macd_initial_down_time"] = datetime.datetime.fromtimestamp(ts_ms / 1000.0, mongolia_tz).strftime('%Y-%m-%d %H:%M:%S')
+                found_macd_down = True
+
+        if found_macd_up and found_macd_down:
+            break
+
+    # 3. SIGNAL LINE Zero Crosses (UP & DOWN тус бүрээр нь хамгийн сүүлийнхийг олох)
+    found_signal_up = False
+    found_signal_down = False
+
     for i in range(len(macd_signal) - 1, 0, -1):
         curr_sig = macd_signal.iloc[i]
         prev_sig = macd_signal.iloc[i-1]
         
-        if (prev_sig > 0 and curr_sig < 0) or (prev_sig < 0 and curr_sig > 0):
+        # Дээшээ огтлолцол (UP)
+        if not found_signal_up and prev_sig < 0 and curr_sig > 0:
             kline_idx = i + offset
             if 0 <= kline_idx < len(klines):
-                # Яг кросс болсон лааны OPEN үнэ [1] болон цаг [0]
-                initial_st["signal_initial_price"] = float(klines[kline_idx][1])
+                initial_st["signal_initial_up_price"] = float(klines[kline_idx][1])
                 ts_ms = int(klines[kline_idx][0])
-                initial_st["signal_initial_time"] = datetime.datetime.fromtimestamp(ts_ms / 1000.0, mongolia_tz).strftime('%Y-%m-%d %H:%M:%S')
-                break
+                initial_st["signal_initial_up_time"] = datetime.datetime.fromtimestamp(ts_ms / 1000.0, mongolia_tz).strftime('%Y-%m-%d %H:%M:%S')
+                found_signal_up = True
+
+        # Доошоо огтлолцол (DOWN)
+        if not found_signal_down and prev_sig > 0 and curr_sig < 0:
+            kline_idx = i + offset
+            if 0 <= kline_idx < len(klines):
+                initial_st["signal_initial_down_price"] = float(klines[kline_idx][1])
+                ts_ms = int(klines[kline_idx][0])
+                initial_st["signal_initial_down_time"] = datetime.datetime.fromtimestamp(ts_ms / 1000.0, mongolia_tz).strftime('%Y-%m-%d %H:%M:%S')
+                found_signal_down = True
+
+        if found_signal_up and found_signal_down:
+            break
 
     return initial_st
     
@@ -637,10 +666,16 @@ def calculate_macd_report(klines, symbol="UNKNOWN"):
             "macd_linedown_limit": f"{macd_state[symbol].get('macd_linedown_limit'):.8f}" if macd_state[symbol].get('macd_linedown_limit') is not None else None,
             "uplimit_cross_line": f"{macd_state[symbol]['uplimit_cross_line']:.8f}" if macd_state[symbol]['uplimit_cross_line'] is not None else None,
             "downlimit_cross_line": f"{macd_state[symbol]['downlimit_cross_line']:.8f}" if macd_state[symbol]['downlimit_cross_line'] is not None else None,
-            "macd_initial_price": f"{macd_state[symbol].get('macd_initial_price'):.8f}" if macd_state[symbol].get('macd_initial_price') is not None else None,
-            "macd_initial_time": macd_state[symbol].get('macd_initial_time'),
-            "signal_initial_price": f"{macd_state[symbol].get('signal_initial_price'):.8f}" if macd_state[symbol].get('signal_initial_price') is not None else None,
-            "signal_initial_time": macd_state[symbol].get('signal_initial_time')
+            # ШИНЭЭР САЛГАСАН UP/DOWN INITIAL ҮНЭ БОЛОН ЦАГУУД
+            "macd_initial_up_price": f"{macd_state[symbol].get('macd_initial_up_price'):.8f}" if macd_state[symbol].get('macd_initial_up_price') is not None else None,
+            "macd_initial_up_time": macd_state[symbol].get('macd_initial_up_time'),
+            "macd_initial_down_price": f"{macd_state[symbol].get('macd_initial_down_price'):.8f}" if macd_state[symbol].get('macd_initial_down_price') is not None else None,
+            "macd_initial_down_time": macd_state[symbol].get('macd_initial_down_time'),
+            
+            "signal_initial_up_price": f"{macd_state[symbol].get('signal_initial_up_price'):.8f}" if macd_state[symbol].get('signal_initial_up_price') is not None else None,
+            "signal_initial_up_time": macd_state[symbol].get('signal_initial_up_time'),
+            "signal_initial_down_price": f"{macd_state[symbol].get('signal_initial_down_price'):.8f}" if macd_state[symbol].get('signal_initial_down_price') is not None else None,
+            "signal_initial_down_time": macd_state[symbol].get('signal_initial_down_time')
         }
     except Exception as e:
         return {"error": str(e)}
