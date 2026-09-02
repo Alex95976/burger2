@@ -631,7 +631,8 @@ def calculate_macd_report(klines, symbol="UNKNOWN"):
             "macd_linedown_limit": f"{macd_state[symbol].get('macd_linedown_limit'):.8f}" if macd_state[symbol].get('macd_linedown_limit') is not None else None,
             "uplimit_cross_line": f"{macd_state[symbol]['uplimit_cross_line']:.8f}" if macd_state[symbol]['uplimit_cross_line'] is not None else None,
             "downlimit_cross_line": f"{macd_state[symbol]['downlimit_cross_line']:.8f}" if macd_state[symbol]['downlimit_cross_line'] is not None else None,
-            "macd_initial_price": f"{macd_state[symbol].get('macd_initial_price'):.8f}" if macd_state[symbol].get('macd_initial_price') is not None else None
+            "macd_initial_price": f"{macd_state[symbol].get('macd_initial_price'):.8f}" if macd_state[symbol].get('macd_initial_price') is not None else None,
+            "signal_initial_price": f"{macd_state[symbol].get('signal_initial_price'):.8f}" if macd_state[symbol].get('signal_initial_price') is not None else None
         }
     except Exception as e:
         return {"error": str(e)}
