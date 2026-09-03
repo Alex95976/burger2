@@ -42,6 +42,15 @@ def root():
             "last_closed_time": last_kline_time
         }
 
+@app.get("/railway-ip")
+def get_railway_public_ip():
+    """Railway серверийн гадагшаа гарч буй Public IP-г шалгах"""
+    try:
+        response = requests.get("https://api.ipify.org?format=json", timeout=5)
+        return response.json()
+    except Exception as e:
+        return {"error": str(e)}
+
 @app.get("/candles")
 def get_all_candles():
     with cache_lock:
@@ -67,14 +76,6 @@ def get_symbol_rsi(symbol: str):
     if "error" in result:
         raise HTTPException(status_code=400, detail=result["error"])
     return result
-
-def get_railway_public_ip():
-    """Railway серверийн гадагшаа гарч буй Public IP-г шалгах"""
-    try:
-        response = requests.get("https://api.ipify.org?format=json", timeout=5)
-        return response.json()
-    except Exception as e:
-        return {"error": str(e)}
 
 @app.get("/macd/{symbol}")
 def get_symbol_macd(symbol: str):
