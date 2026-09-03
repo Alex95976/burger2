@@ -31,15 +31,6 @@ closed_kline_count = 0
 last_kline_time = 0
 # ==================== FASTAPI APP ====================
 app = FastAPI(title="Binance Base Data Daemon with RSI & MACD Logic")
-
-@app.get("/railway-ip")
-def get_railway_public_ip():
-    """Railway серверийн гадагшаа гарч буй Public IP-г шалгах"""
-    try:
-        response = requests.get("https://api.ipify.org?format=json", timeout=5)
-        return response.json()
-    except Exception as e:
-        return {"error": str(e)}
         
 @app.get("/")
 def root():
@@ -76,6 +67,14 @@ def get_symbol_rsi(symbol: str):
     if "error" in result:
         raise HTTPException(status_code=400, detail=result["error"])
     return result
+
+def get_railway_public_ip():
+    """Railway серверийн гадагшаа гарч буй Public IP-г шалгах"""
+    try:
+        response = requests.get("https://api.ipify.org?format=json", timeout=5)
+        return response.json()
+    except Exception as e:
+        return {"error": str(e)}
 
 @app.get("/macd/{symbol}")
 def get_symbol_macd(symbol: str):
